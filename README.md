@@ -6,16 +6,21 @@
 
 ## English
 
-A clean and robust RESTful API for a To-Do List application, built with **Go**, **PostgreSQL**, and **Docker**. This is my first Go project designed to demonstrate hands-on experience with backend development, containerization, and database integration.
+A clean and robust RESTful API for a To-Do List application, built with **Go**, **PostgreSQL**, and **Docker**. This project demonstrates hands-on experience with backend development, containerization, and clean database integration.
+
+### 🔄 Changelog & Updates
+* **14.06.2026** — **Major Refactoring:** Completely migrated from native `net/http` to the **Gin Web Framework**. Re-architected API endpoints to follow standard **RESTful principles** (resource IDs are now handled directly via URL parameters instead of JSON request bodies).
 
 ### 🚀 Features
 * **Full CRUD Lifecycle:** Create, Read, Update, and Delete tasks.
+* **RESTful Routing:** Modern routing and JSON binding powered by Gin.
 * **Database Persistence:** Integrated with PostgreSQL via `pgx/v5` driver.
 * **Environment Configuration:** Secure credential management using `.env` files and `godotenv`.
 * **Containerization:** Ready-to-go database infrastructure managed via Docker Compose.
 
 ### 🛠️ Tech Stack
 * **Language:** Go (Golang)
+* **Framework:** Gin Web Framework (`github.com/gin-gonic/gin`)
 * **Database:** PostgreSQL
 * **Tools:** Docker, Docker Compose, Postman (for API testing)
 * **Libraries:** `github.com/jackc/pgx/v5`, `github.com/joho/godotenv`
