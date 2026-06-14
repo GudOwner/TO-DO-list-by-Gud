@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 )
@@ -42,26 +43,11 @@ func InitDBURL() (string, error) {
 
 var db *pgx.Conn
 
-func HandleTasks(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		getTasks(w, r)
-	case http.MethodPost:
-		CreateTask(w, r)
-	case http.MethodPut:
-		UpdateTask(w, r)
-	case http.MethodDelete:
-		DeleteTask(w, r)
-	default:
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-	}
-}
-
-func getTasks(w http.ResponseWriter, r *http.Request) {
+func getTasks(c *gin.Context) {
 	query := "SELECT id, title, status FROM todo_list"
 	rows, err := db.Query(context.Background(), query)
 	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	defer rows.Close()
@@ -70,23 +56,22 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var t ToDo
 		if err := rows.Scan(&t.ID, &t.Title, &t.Status); err != nil {
-			http.Error(w, "Ошибка чтения строки", http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		tasks = append(tasks, t)
 	}
 	if err = rows.Err(); err != nil {
-		http.Error(w, "Ошибка базы данных после чтения", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tasks)
+	c.JSON(http.StatusOK, tasks)
 }
 
-func CreateTask(w http.ResponseWriter, r *http.Request) {
+func CreateTask(c *gin.Context) {
 	var newTodo ToDo
-	if err := json.NewDecoder(r.Body).Decode(&newTodo); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&newTodo); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -94,52 +79,57 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	err := db.QueryRow(context.Background(), query, newTodo.Title, newTodo.Status).Scan(&newTodo.ID)
 	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newTodo)
+	c.JSON(http.StatusCreated, newTodo)
 
 }
-func UpdateTask(w http.ResponseWriter, r *http.Request) {
-	var UpdateToDo ToDo
-	if err := json.NewDecoder(r.Body).Decode(&UpdateToDo); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
-		return
-	}
-
-	query := "UPDATE todo_list SET title = $1, status = $2 WHERE id = $3"
-	_, err := db.Exec(context.Background(), query, UpdateToDo.Title, UpdateToDo.Status, UpdateToDo.ID)
+func UpdateTask(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(UpdateToDo)
-
+	var UpdateToDo ToDo
+	if err := c.ShouldBindJSON(&UpdateToDo); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	UpdateToDo.ID = id
+	query := "UPDATE todo_list SET title = $1, status = $2 WHERE id = $3"
+	_, err = db.Exec(context.Background(), query, UpdateToDo.Title, UpdateToDo.Status, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, UpdateToDo)
 }
 
-func DeleteTask(w http.ResponseWriter, r *http.Request) {
-	var delTodo ToDo
-	if err := json.NewDecoder(r.Body).Decode(&delTodo); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+func DeleteTask(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
 		return
 	}
 
 	query := "DELETE FROM todo_list WHERE id = $1"
-	_, err := db.Exec(context.Background(), query, delTodo.ID)
+	_, err = db.Exec(context.Background(), query, id)
 	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	c.Status(http.StatusNoContent)
 }
 
 func main() {
+	r := gin.Default()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	dbURL, err := InitDBURL()
 	if err != nil {
 		log.Fatalf("Error with init cfg %v", err)
@@ -156,7 +146,11 @@ func main() {
 	}
 	fmt.Println("Successful! db is connecting")
 
-	http.HandleFunc("/task", HandleTasks)
-	http.ListenAndServe(":8080", nil)
+	r.GET("/task", getTasks)
+	r.PUT("/task/:id", UpdateTask)
+	r.POST("/task", CreateTask)
+	r.DELETE("/task/:id", DeleteTask)
+
+	r.Run(":8080")
 
 }
