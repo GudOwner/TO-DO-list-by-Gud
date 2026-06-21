@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # Твой бэкенд (Go-приложение)
   app:
     build: .
     container_name: todo-app
@@ -9,7 +8,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DB_URL: "postgres://postgres:01131@toDoList:5432/to_do?sslmode=disable"
+      # Собираем строку подключения динамически
+      DB_URL: "postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable"
     depends_on:
       - toDoList
 
@@ -18,9 +18,9 @@ services:
     container_name: toDoList
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 01131
-      POSTGRES_DB: to_do
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
